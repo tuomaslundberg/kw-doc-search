@@ -1,0 +1,51 @@
+#!/bin/bash
+
+#SBATCH --job-name=get-docs
+#SBATCH --account=project_462000353
+#SBATCH --time=00:30:00
+#SBATCH --partition=small
+#SBATCH --cpus-per-task=4
+#SBATCH --mem-per-cpu=15G
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --output=slurm-logs/array_%A_%a.out
+#SBATCH --error=slurm-logs/array_%A_%a.err
+#SBATCH --array=0-27
+
+# If run without sbatch, invoke here
+if [ -z "$SLURM_JOB_ID" ]; then
+	sbatch "$0" "$@"
+    exit
+fi
+
+# See http://redsymbol.net/articles/unofficial-bash-strict-mode/
+set -euo pipefail
+
+rm -f "slurm-logs/current_${SLURM_JOB_NAME}_${SLURM_ARRAY_TASK_ID}.err"
+rm -f "slurm-logs/current_${SLURM_JOB_NAME}_${SLURM_ARRAY_TASK_ID}.out"
+ln -s "array_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.err" "slurm-logs/current_${SLURM_JOB_NAME}_${SLURM_ARRAY_TASK_ID}.err"
+ln -s "array_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.out" "slurm-logs/current_${SLURM_JOB_NAME}_${SLURM_ARRAY_TASK_ID}.out"
+
+read -r lang target_token target_register source < <(sed -n "$((SLURM_ARRAY_TASK_ID + 1))p" keyword-grid.txt)
+
+data_name="hplt"
+
+case $lang in
+  "zh")
+    file="/scratch/project_462000353/amanda/keywords-zh/explanations/${data_name}/${source}"
+  ;;
+  *)
+    file="/scratch/project_462000353/amanda/keywords/SACX-backup/explanations/${data_name}/${source}"
+  ;;
+esac
+
+module purge
+module use /appl/local/csc/modulefiles
+module load pytorch
+
+[[ "$PYTHONPATH" != *"/users/tlundber/pythonuserbase/lib/python3.10/site-packages"* ]] && \
+export PYTHONPATH="/users/tlundber/pythonuserbase/lib/python3.10/site-packages:$PYTHONPATH"
+
+python get-docs.py "$file" "$target_token" "$target_register"
+
+wait
